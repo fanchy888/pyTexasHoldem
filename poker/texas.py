@@ -1,5 +1,5 @@
-from deck import Deck
-from poker_set import TexasPokerSet
+from deck import Deck, TexasPokerSet
+from poker.player import Player
 
 
 class TexasPokerTable:
@@ -72,6 +72,8 @@ class TexasPokerTable:
         self.in_turn = self.dealer
         self.pot = {i: 0 for i in range(self.total_players)}
         self.current_bet = 0
+        for p in self.players:
+            p.ready()
 
     def start(self):
         self.next_turn()
@@ -87,7 +89,7 @@ class TexasPokerTable:
     def dispatch_cards(self):
         for i in range(self.total_players):
             player_idx = (self.small_blind_player + i) % self.total_players
-            cards = [self.deck.pick()]
+            cards = [self.deck.pick(), self.deck.pick()]
             print('giving card to player', player_idx)
             self.players[player_idx].get_cards(cards)
 
@@ -100,6 +102,7 @@ class TexasPokerTable:
             self._fold()
         else:
             self._check()
+        self.active_player.act()
         self.next_turn()
 
     def flop(self):
@@ -108,95 +111,23 @@ class TexasPokerTable:
             self.pool.append(c)
 
     def showdown(self):
-        alive_players = [p for p in self.players if not p.folded]
+        alive_players = [player for player in self.players if not player.folded]
+        for player in alive_players:
+            player.cal_max_rank(self.pool)
 
-
-
-class HandChecker(TexasPokerSet):
-    rank_order = ["High Card", "One Pair", "Two Pair", "Three of a Kind", "Straight",
-                  "Flush", "Full House", "Four of a Kind", "Straight Flush"]
-
-    def __init__(self, cards):
-        self.cards = sorted(cards)
-        self.size = len(self.cards)
-        if self.size != 5:
-            raise ValueError("card size must be 5")
-        self.values = [c.value for c in self.cards]
-        self.colors = [c.color for c in self.cards]
-        self.color_cnt = len(set(self.colors))
-        self.value_cnt = len(set(self.values))
-        value_distribute = {}
-        for c in self.cards:
-            if c.value not in value_distribute:
-                value_distribute[c.value] = 0
-            value_distribute[c.value] += 1
-        self.cnt_of_same_value = sorted(list(value_distribute.values()))
-
-    def is_royal(self):
-        return self.is_straight_flush() and self.values[0] == 8
-
-    def is_straight_flush(self):
-        return self.is_straight() and self.is_flush()
-
-    def is_four(self):
-        return self.cnt_of_same_value[-1] == 4
-
-    def is_full_house(self):
-        return self.value_cnt == 2 and self.cnt_of_same_value[-1] == 3
-
-    def is_flush(self):
-        return self.color_cnt == 1
-
-    def is_straight(self):
-        special_straight = [i for i in range(self.size-1)]  # 2,3,4,5,A
-        special_straight.append(12)
-
-        return self.value_cnt == self.size and \
-            (self.values == special_straight or self.values[-1] - self.values[0] + 1 == self.size)
-
-    def is_three(self):
-        return self.value_cnt == 3 and self.cnt_of_same_value[-1] == 3
-
-    def is_two_pair(self):
-        return self.value_cnt == 3 and self.cnt_of_same_value[-1] == 2
-
-    def is_one_pair(self):
-        return self.value_cnt == 4
-
-    def rank(self):
-        if self.is_royal():
-            return 9
-        elif self.is_straight_flush():
-            return 8
-        elif self.is_four():
-            return 7
-        elif self.is_full_house():
-            return 6
-        elif self.is_flush():
-            return 5
-        elif self.is_straight():
-            return 4
-        elif self.is_three():
-            return 3
-        elif self.is_two_pair():
-            return 2
-        elif self.is_one_pair():
-            return 1
-        else:
-            return 0
+        alive_players.sort(key=lambda x: x.rank)
+        return alive_players[-1].rank
 
 
 if __name__ == '__main__':
-    d = Deck()
-    d.shuffle()
-    cards1 = [d.pick() for i in [0, 1, 2, 3, 12]]
-    for card in cards1:
-        print(card)
-    p = HandChecker(cards1)
-    print(p.rank())
-
-    cards1 = [d.pick() for i in [0, 1, 2, 3, 12]]
-    for card in cards1:
-        print(card)
-    p = HandChecker(cards1)
-    print(p.rank())
+    ps = [Player(i) for i in range(5)]
+    game = TexasPokerTable(ps)
+    game.ready()
+    game.dispatch_cards()
+    for i in range(5):
+        game.flop()
+    res = game.showdown()
+    for r in res:
+        print(r.rank)
+        for c in r.final_cards:
+            print(c)
