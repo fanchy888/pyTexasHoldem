@@ -2,18 +2,28 @@ from deck import Deck, TexasPokerSet
 from poker.player import Player
 
 
-class TexasPokerTable:
+class TexasPokerTable:  # 记录牌局状态
+    START = 'start'
+    CALL = 'call'
+    RAISE = 'raise'
+    FOLD = 'fold'
+    CHECK = 'check'
+    OK = 'ok'
+
     def __init__(self, players):
         self.players = players
         self.total_players = len(players)
         self.deck = Deck()
         self.state = 0
-        self.dealer = -1
+        self.dealer = 0
         self.in_turn = 0
         self.pot = {}
         self.pool = []
         self.base_bet = 5
         self.current_bet = 0
+        self.started = False
+        self.final_result = None
+        self.mode = 'bet'
 
     @property
     def active_player(self):
@@ -27,12 +37,53 @@ class TexasPokerTable:
     def big_blind_player(self):
         return (self.dealer + 2) % self.total_players
 
+    @property
+    def is_waiting_for_action(self):
+        return self.state in [0, 2, 3, 5, 6, 8, 9, 11, 12, 13]
+
+    @property
+    def valid_actions(self):
+        if self.is_waiting_for_action:
+            if not self.started:
+                return [self.START]
+            elif self.mode == 'bet':
+                return [self.RAISE, self.FOLD, self.CALL, self.CHECK]
+            elif self.mode == 'after':
+                return [self.FOLD, self.CHECK, self.CALL]
+            elif self.mode == 'finish':
+                return [self.OK]
+        else:
+            return []
+
+    def begin_bet(self):
+        self.mode = 'bet'
+
+    def after_bet(self):
+        self.mode = 'after'
+
+    def terminate(self):
+        self.mode = 'finish'
+
+    def all_acted(self):
+        for p in self.players:
+            if not p.folded:
+                if not p.acted:
+                    return False
+        return True
+
+    def all_ready(self):
+        for p in self.players:
+            if not p.acted:
+                return False
+        return True
+
     def clear_status(self):
         for player in self.players:
             player.clear_status()
+
+    def round_start(self):
         self.in_turn = self.dealer
         self.next_turn()
-        self.current_bet = 0
 
     def next_turn(self):
         for i in range(1, self.total_players):
@@ -55,6 +106,7 @@ class TexasPokerTable:
         self._bet(amount2bet)
 
     def _fold(self):
+        print("player fold", self.active_player.name)
         self.active_player.fold()
 
     def _bet(self, amount):
@@ -63,19 +115,25 @@ class TexasPokerTable:
         self.active_player.set_bet(amount)
 
     def _check(self):
-        print("player check", self.active_player)
+        print("player check", self.active_player.name)
+
+    def player_ready(self, player_id):
+        print("player ready", self.players[player_id].name)
+        self.players[player_id].act()
 
     def ready(self):
-        self.deck.reset()
+        self.started = False
+        self.final_result = None
         self.deck.shuffle()
-        self.dealer = (self.dealer + 1) % self.total_players
         self.in_turn = self.dealer
         self.pot = {i: 0 for i in range(self.total_players)}
         self.current_bet = 0
+        self.pool = []
         for p in self.players:
             p.ready()
 
     def start(self):
+        self.started = True
         self.next_turn()
 
     def set_blind(self):
@@ -94,40 +152,56 @@ class TexasPokerTable:
             self.players[player_idx].get_cards(cards)
 
     def take_action(self, action):
-        if action['action'] == 'call':
+        if action['action'] == self.CALL:
             self._call()
-        elif action['action'] == 'raise':
+        elif action['action'] == self.RAISE:
             self._raise(action['amount'])
-        elif action['action'] == 'fold':
+        elif action['action'] == self.FOLD:
             self._fold()
+        elif action['action'] == self.CHECK:
+            self._check()
         else:
+            print("not supported", action)
             self._check()
         self.active_player.act()
         self.next_turn()
 
     def flop(self):
         if len(self.pool) < 5:
-            c = self.deck.pick()
-            self.pool.append(c)
+            card = self.deck.pick()
+            self.pool.append(card)
+
+    def check_finish(self):
+        finished = len([p for p in self.players if not p.folded]) == 1
+        return finished
 
     def showdown(self):
         alive_players = [player for player in self.players if not player.folded]
-        for player in alive_players:
-            player.cal_max_rank(self.pool)
+        if not self.check_finish():
+            for player in alive_players:
+                player.cal_max_rank(self.pool)
 
-        alive_players.sort(key=lambda x: x.rank)
-        return alive_players[-1].rank
+            alive_players.sort(key=lambda x: x.rank)
+        self.final_result = alive_players
+        # print('final result========')
+        # for c in self.pool:
+        #     print(c)
+        # for a in self.final_result:
+        #     print(a.name, a.rank, [c.__str__() for c in a.cards])
+        #     for c in a.final_cards:
+        #         print(c)
+        #     print('-------')
 
+    def end(self):
+        self.dealer = (self.dealer + 1) % self.total_players
+        self.state = 0
+        self.started = False
+        self.deck.reset()
 
-if __name__ == '__main__':
-    ps = [Player(i) for i in range(5)]
-    game = TexasPokerTable(ps)
-    game.ready()
-    game.dispatch_cards()
-    for i in range(5):
-        game.flop()
-    res = game.showdown()
-    for r in res:
-        print(r.rank)
-        for c in r.final_cards:
-            print(c)
+    def info(self):
+        print('---info---')
+        print(self.state)
+        print(self.pot, self.current_bet)
+        print(self.pool)
+        print(self.active_player.name)
+        print('==========')

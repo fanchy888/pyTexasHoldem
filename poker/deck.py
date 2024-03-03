@@ -72,15 +72,3 @@ class Card:
 
     def __eq__(self, other):
         return self.value == other.value and self.color == self.color
-
-
-if __name__ == '__main__':
-    d = Deck()
-    print(d)
-    d.shuffle()
-    print(d)
-    print(d.pick())
-    print(d.pick())
-    d.reset()
-    d.order()
-    print(d)

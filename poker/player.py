@@ -1,4 +1,4 @@
-from poker.deck import TexasPokerSet, Deck
+from poker.deck import TexasPokerSet, Deck, Card
 
 
 class HandChecker(TexasPokerSet):
@@ -66,20 +66,22 @@ class HandChecker(TexasPokerSet):
         elif self.is_straight():
             return 4, -1 if self.values[-1] == 12 and self.values[0] == 0 else self.values[-1]
         elif self.is_three():
-            return 3, self.cnt_of_same_value[-1][0]
+            return 3, (self.cnt_of_same_value[-1][0], self.cnt_of_same_value[1][0], self.cnt_of_same_value[0][0])
         elif self.is_two_pair():
-            return 2, self.cnt_of_same_value[-1][0]
+            return 2, (self.cnt_of_same_value[-1][0], self.cnt_of_same_value[1][0], self.cnt_of_same_value[0][0])
         elif self.is_one_pair():
-            return 1, self.cnt_of_same_value[-1][0]
+            return 1, (self.cnt_of_same_value[-1][0], self.cnt_of_same_value[2][0], self.cnt_of_same_value[1][0],
+                       self.cnt_of_same_value[0][0])
         else:
             return 0, tuple(self.values[::-1])
 
 
 class Player:
-    def __init__(self, player_id):
+    def __init__(self, player_id, name=''):
         self.player_id = player_id
         self.chips = 1000
         self.folded = False
+        self.name = name
         self.acted = False
         self.cards = []
         self.rank = None
@@ -93,9 +95,13 @@ class Player:
         self.cards = []
         self.rank = None
         self.folded = False
+        self.acted = False
 
     def act(self):
         self.acted = True
+
+    def fold(self):
+        self.folded = True
 
     def clear_status(self):
         self.acted = False
@@ -125,16 +131,14 @@ class Player:
 
 
 if __name__ == '__main__':
-    d = Deck()
-    d.shuffle()
-    cards1 = [d.pick() for i in [0, 1, 2, 3, 12]]
-    for card in cards1:
-        print(card)
-    p = HandChecker(cards1)
-    print(p.rank())
+    p1 = Player(0)
+    cards = [Card(1, 4, TexasPokerSet), Card(3, 8, TexasPokerSet)]
+    p1.get_cards(cards)
+    pool = [Card(3, 1, TexasPokerSet),
+            Card(0, 4, TexasPokerSet),
+            Card(1, 7, TexasPokerSet),
+            Card(1, 3, TexasPokerSet),
+            Card(0, 7, TexasPokerSet)]
 
-    cards1 = [d.find(1, i) for i in [0, 3, 5, 1, 12]]
-    for card in cards1:
-        print(card)
-    p = HandChecker(cards1)
-    print(p.rank())
+    p1.cal_max_rank(pool)
+    print([c.__str__() for c in p1.final_cards])
